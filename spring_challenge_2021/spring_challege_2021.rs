@@ -2,10 +2,6 @@ use std::io;
 use std::cmp;
 
 
-// Structures
-// - board
-// - tile
-// - player?
 // Plan
 // - add enum for richness values to consts
 // - parse actions
@@ -146,7 +142,7 @@ impl Player {
 // Actions
 struct Action {
     action_string: String,
-    is_complete: bool, //should be changed to enum later
+    command: String, //should be changed to enum later
     cell_index: i32,
 }
 
@@ -154,20 +150,18 @@ impl Action {
     pub fn new() -> Action {
         let mut action = Action {
             action_string: String::new(),
-            is_complete: false,
+            command: String::new(),
             cell_index: -1,
         };
         let mut input_line = String::new();
         io::stdin().read_line(&mut input_line).unwrap();
         action.action_string = input_line.trim_matches('\n').to_string();
-        let inputs = input_line.split(" ").collect::<Vec<_>>();
-        if inputs[0] == "COMPLETE" {
-            action.is_complete = true;
-        }
+        let inputs = action.action_string.split(" ").collect::<Vec<_>>();
+        action.command = inputs[0].to_string();
         if inputs.len() > 1 {
             action.cell_index = parse_input!(inputs[1], i32);
         }
-        eprintln!("{} at cell {}", action.is_complete, action.cell_index);
+        eprintln!("{}", action.command);
         return action;
     }
 
@@ -185,6 +179,8 @@ struct Game {
     actions: Vec<Action>,
     me: Player,
     opponent: Player,
+    ntree2: i32,
+    ntree3: i32,
 }
 
 impl Game {
@@ -204,6 +200,8 @@ impl Game {
             actions: Vec::new(),
             me: Player::new(),
             opponent: Player::new(),
+            ntree2: 0,
+            ntree3: 0,
         }
     }
 
@@ -227,6 +225,11 @@ impl Game {
         let number_of_trees = parse_input!(input_line, i32); // the current amount of trees
         for i in 0..number_of_trees as usize {
            self.trees.push(Tree::new());
+           match self.trees[i].size {
+               2 => self.ntree2 += 1,
+               3 => self.ntree3 += 1,
+               _ => {},
+           }
         }
 
         let mut input_line = String::new();
@@ -240,27 +243,56 @@ impl Game {
     fn reset(&mut self) {
         self.trees.clear();
         self.actions.clear();
+        self.ntree2 = 0;
+        self.ntree3 = 0;
     }
 
-    pub fn naive_move(&self) {
-        let mut gain: i32 = -1;
+    pub fn naive_move(&mut self) {
+        let mut gain: i32 = -2 * self.me.sun;
         let mut action_index: usize = 0;
+
+        for tree in self.trees.iter() {
+            match tree.size {
+                2 => self.ntree2 += 1,
+                3 => self.ntree3 += 1,
+                _ => {},
+            }
+        }
 
         for (i, action) in self.actions.iter().enumerate() {
             let mut current_gain = -1;
-            if action.is_complete && self.me.sun >= TREE_LIFECYCLE_COST {
+            if action.command == "COMPLETE" && self.me.sun >= TREE_LIFECYCLE_COST {
                 current_gain = self.nutrients;
                 current_gain += self.board.get_cell_richness_points(action.cell_index as usize);
-            } else if action.action_string == "WAIT" {
-                current_gain = 0;
+            } else if action.command == "GROW" {
+                let size = self.get_tree_size(action.cell_index);
+                let cost: i32 = match size {
+                    1 => 3 + self.ntree2,
+                    2 => 7 + self.ntree3,
+                    _ => 1000000,
+                };
+                eprintln!("{} for {} ({})", action.action_string, cost, self.me.sun);
+                if cost <= self.me.sun {
+                    current_gain = self.board.get_cell_richness_points(action.cell_index as usize);
+                }
+            } else if action.command == "WAIT" {
+                current_gain = -1;
             }
+            eprintln!("{} gains {} ({})", action.action_string, current_gain, gain);
             if current_gain > gain {
                 gain = current_gain;
                 action_index = i;
             }
         }
-        assert!(gain >= 0, "action index is negative");
+        assert!(gain >= -1, "action not selected");
         self.actions[action_index].exec();
+    }
+
+    fn get_tree_size(&self, cell: i32) -> i32 {
+        for tree in self.trees.iter() {
+            if tree.cell_index == cell { return tree.size; }
+        }
+        return 0;
     }
 }
 
