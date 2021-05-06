@@ -7,6 +7,9 @@ use std::cmp;
 // - parse actions
 // - implement board - distance between cells (if needed since given list of actions)
 
+// Strat notes
+// - some kind of simulation is needed. if I don't gain enough to make difference by having a tree, then it should be completed, otherwise the enemy removes nutritions
+
 macro_rules! parse_input {
     ($x:expr, $t:ident) => ($x.trim().parse::<$t>().unwrap())
 }
