@@ -224,12 +224,14 @@ impl Game {
         io::stdin().read_line(&mut input_line).unwrap();
         let number_of_trees = parse_input!(input_line, i32); // the current amount of trees
         for i in 0..number_of_trees as usize {
-           self.trees.push(Tree::new());
-           match self.trees[i].size {
-               2 => self.ntree2 += 1,
-               3 => self.ntree3 += 1,
-               _ => {},
-           }
+            self.trees.push(Tree::new());
+            if self.trees[i].is_mine {
+                match self.trees[i].size {
+                    2 => self.ntree2 += 1,
+                    3 => self.ntree3 += 1,
+                    _ => {},
+                }
+            }
         }
 
         let mut input_line = String::new();
@@ -250,18 +252,10 @@ impl Game {
     pub fn naive_move(&mut self) {
         let mut gain: i32 = -2 * self.me.sun;
         let mut action_index: usize = 0;
-
-        for tree in self.trees.iter() {
-            match tree.size {
-                2 => self.ntree2 += 1,
-                3 => self.ntree3 += 1,
-                _ => {},
-            }
-        }
-
+        eprintln!("2:{} 3:{}", self.ntree2, self.ntree3);
         for (i, action) in self.actions.iter().enumerate() {
             let mut current_gain = -1;
-            if action.command == "COMPLETE" && self.me.sun >= TREE_LIFECYCLE_COST {
+            if action.command == "COMPLETE" && self.me.sun >= TREE_LIFECYCLE_COST && self.day > 4{
                 current_gain = self.nutrients;
                 current_gain += self.board.get_cell_richness_points(action.cell_index as usize);
             } else if action.command == "GROW" {
