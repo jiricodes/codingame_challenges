@@ -1,4 +1,5 @@
 use std::io;
+use std::cmp;
 
 
 // Structures
@@ -7,7 +8,6 @@ use std::io;
 // - player?
 // Plan
 // - add enum for richness values to consts
-// - read input
 // - parse actions
 // - implement board - distance between cells (if needed since given list of actions)
 
@@ -75,6 +75,11 @@ impl Board {
             eprintln!("{}: {}", i, self.board[i].index);
         }
     }
+
+    pub fn get_cell_richness_points(&self, index: usize) -> i32 {
+        let value = (self.board[index].richness - 1) * 2;
+        cmp::max(0, value)
+    }
 }
 
 // Tree
@@ -141,7 +146,34 @@ impl Player {
 // Actions
 struct Action {
     action_string: String,
+    is_complete: bool, //should be changed to enum later
     cell_index: i32,
+}
+
+impl Action {
+    pub fn new() -> Action {
+        let mut action = Action {
+            action_string: String::new(),
+            is_complete: false,
+            cell_index: -1,
+        };
+        let mut input_line = String::new();
+        io::stdin().read_line(&mut input_line).unwrap();
+        action.action_string = input_line.trim_matches('\n').to_string();
+        let inputs = input_line.split(" ").collect::<Vec<_>>();
+        if inputs[0] == "COMPLETE" {
+            action.is_complete = true;
+        }
+        if inputs.len() > 1 {
+            action.cell_index = parse_input!(inputs[1], i32);
+        }
+        eprintln!("{} at cell {}", action.is_complete, action.cell_index);
+        return action;
+    }
+
+    pub fn exec(&self) {
+        println!("{}", self.action_string);
+    }
 }
 
 // Game
@@ -196,11 +228,39 @@ impl Game {
         for i in 0..number_of_trees as usize {
            self.trees.push(Tree::new());
         }
+
+        let mut input_line = String::new();
+        io::stdin().read_line(&mut input_line).unwrap();
+        let number_of_possible_moves = parse_input!(input_line, i32);
+        for i in 0..number_of_possible_moves as usize {
+            self.actions.push(Action::new());
+        }
     }
 
     fn reset(&mut self) {
         self.trees.clear();
         self.actions.clear();
+    }
+
+    pub fn naive_move(&self) {
+        let mut gain: i32 = -1;
+        let mut action_index: usize = 0;
+
+        for (i, action) in self.actions.iter().enumerate() {
+            let mut current_gain = -1;
+            if action.is_complete && self.me.sun >= TREE_LIFECYCLE_COST {
+                current_gain = self.nutrients;
+                current_gain += self.board.get_cell_richness_points(action.cell_index as usize);
+            } else if action.action_string == "WAIT" {
+                current_gain = 0;
+            }
+            if current_gain > gain {
+                gain = current_gain;
+                action_index = i;
+            }
+        }
+        assert!(gain >= 0, "action index is negative");
+        self.actions[action_index].exec();
     }
 }
 
@@ -217,21 +277,12 @@ fn main() {
     loop {
         game.update();
 
-        let mut input_line = String::new();
-        io::stdin().read_line(&mut input_line).unwrap();
-        let number_of_possible_moves = parse_input!(input_line, i32);
-        for i in 0..number_of_possible_moves as usize {
-            let mut input_line = String::new();
-            io::stdin().read_line(&mut input_line).unwrap();
-            let possible_move = input_line.trim_matches('\n').to_string();
-            eprintln!("{}", possible_move);
-        }
-
         // Write an action using println!("message...");
         // To debug: eprintln!("Debug message...");
 
 
         // GROW cellIdx | SEED sourceIdx targetIdx | COMPLETE cellIdx | WAIT <message>
-        println!("WAIT");
+        // println!("WAIT");
+        game.naive_move();
     }
 }
