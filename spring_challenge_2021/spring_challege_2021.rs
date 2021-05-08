@@ -9,6 +9,26 @@ use std::cmp;
 
 // Strat notes
 // - some kind of simulation is needed. if I don't gain enough to make difference by having a tree, then it should be completed, otherwise the enemy removes nutritions
+// - spawning seems to be on the outer ring, with 2 trees of level 1.
+//      So ideal start may be
+//          - wait (2 suns) -> 4suns
+//          - grow one tree (1sun) -> 4suns
+//          - grow other tree (0sun) -> 4suns
+//          - plant 2 seeds (1sun) -> 1sun
+//          - grow the seed (0sun) -> 4sun
+//          - grow the second seed (2sun) & plant from the tree1 in central area
+//          -> from here try to plant as many trees in central area from the lvl1 sampling
+//                  keep level of trees balanced (some kind of cost calculator)
+//                      maybe grow outer trees to lvl3 and not harvest them for the sun income?
+//          NOTES:
+//              - make sure to harvest some trees early
+//              - never harvest all trees unless end of game
+//              - implement some action where
+
+// TODO
+// - add seeding and growing lvl1 to naive
+// - think of harvesting strat
+// - add initial steps
 
 macro_rules! parse_input {
     ($x:expr, $t:ident) => ($x.trim().parse::<$t>().unwrap())
@@ -29,6 +49,7 @@ struct Cell {
     tree: Option<Tree>,
     neighbours: [i32; 6],
 }
+
 
 impl Cell {
     pub fn new() -> Cell {
@@ -291,6 +312,32 @@ impl Game {
         }
         return 0;
     }
+
+    fn initial_stage(&mut self) {
+        match self.day {
+            0 => { println!("WAIT"); },
+            1 => { 
+            eprintln!("grow one");
+            println!("WAIT");
+            },
+            2 => {
+                eprintln!("grow another one");
+                println!("WAIT");
+            },
+            3=> {
+                eprintln!("plant two seeds");
+                println!("WAIT");
+            },
+            4 => {
+                eprintln!("grow one seed");
+                println!("WAIT");
+            },
+            5 => {
+                eprintln!("grow other seed and plant one in center (from lvl1)");
+                println!("WAIT");
+            },
+        }
+    }
 }
 
 
@@ -312,6 +359,10 @@ fn main() {
 
         // GROW cellIdx | SEED sourceIdx targetIdx | COMPLETE cellIdx | WAIT <message>
         // println!("WAIT");
-        game.naive_move();
+        if game.day < 6 {
+            game.initial_stage();
+        } else {
+            game.naive_move();
+        }
     }
 }
