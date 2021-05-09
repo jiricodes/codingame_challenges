@@ -8,24 +8,17 @@ use std::cmp;
 // - implement board - distance between cells (if needed since given list of actions)
 
 // Strat notes
+// - prio seed (correct slot) > grow > harvest > wait
 // - some kind of simulation is needed. if I don't gain enough to make difference by having a tree, then it should be completed, otherwise the enemy removes nutritions
 // - spawning seems to be on the outer ring, with 2 trees of level 1.
-//      So ideal start may be
-//          - wait (2 suns) -> 4suns
-//          - grow one tree (1sun) -> 4suns
-//          - grow other tree (0sun) -> 4suns
-//          - plant 2 seeds (1sun) -> 1sun
-//          - grow the seed (0sun) -> 4sun
-//          - grow the second seed (2sun) & plant from the tree1 in central area
-//          -> from here try to plant as many trees in central area from the lvl1 sampling
-//                  keep level of trees balanced (some kind of cost calculator)
-//                      maybe grow outer trees to lvl3 and not harvest them for the sun income?
-//          NOTES:
-//              - make sure to harvest some trees early
-//              - never harvest all trees unless end of game
-//              - implement some action where
+// - grow trees in positions so they dont cast shadows on each other - one step in direction and then one more in dir +1 or -1
+// - make sure to harvest some trees early
+// - never harvest all trees unless end of game - check if harvesting gains more points than keeping sun points (harvest all athe end?)
+
 
 // TODO
+// - create and action struct
+// - action should self evaluate itself somehow and return Option(value), if returned None then "WAIT"
 // - add seeding and growing lvl1 to naive
 // - think of harvesting strat
 // - add initial steps
