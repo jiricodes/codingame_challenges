@@ -19,7 +19,6 @@ use std::fmt;
 // TODO
 // - create and action struct
 // - action should self evaluate itself somehow and return Option(value), if returned None then "WAIT"
-// - add seeding and growing lvl1 to naive
 // - think of harvesting strat
 // - add initial steps
 
