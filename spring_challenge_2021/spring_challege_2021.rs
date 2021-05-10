@@ -69,8 +69,32 @@ impl Cell {
         }
     }
 
+    pub fn update_tree(&mut self, tree: Tree) {
+        self.tree = Some(tree);
+    }
+
     pub fn reset_tree(&mut self) {
         self.tree = None;
+    }
+
+    pub fn get_tree_size(&self) -> i32 {
+        if self.tree.is_some() {
+            self.tree.as_ref().unwrap().size
+        } else {
+            -1
+        }
+    }
+
+    pub fn get_shadow_value(&self) -> i32 {
+        if self.tree.is_some() {
+            if self.tree.as_ref().unwrap().is_mine {
+                return -2;
+            } else {
+                return 1;
+            }
+        } else {
+            return 0;
+        }
     }
 }
 
@@ -115,6 +139,28 @@ impl Board {
         for cell in self.board.iter_mut() {
             cell.reset_tree();
         }
+    }
+
+    pub fn update_tree(&mut self, tree: Tree) {
+        self.board[tree.cell_index as usize].update_tree(tree);
+    }
+
+    pub fn get_tree_size(&self, index: usize) -> i32 {
+        self.board[index].get_tree_size()
+    }
+
+    pub fn cast_shadow(&self, origin: usize, direction: usize, size: i32) -> i32 {
+        let ngb = self.board[origin].neighbours[direction];
+        if ngb == -1 || size == 0 { return 0; }
+        self.board[ngb as usize].get_shadow_value() + self.cast_shadow(ngb as usize, direction, size - 1)
+    }
+
+    pub fn cast_shadow_in_every_direction(&self, origin: usize, size: i32) -> i32 {
+        let mut ret: i32 = 0;
+        for i in 0..6 {
+            ret += self.cast_shadow(origin, i, size);
+        }
+        return ret;
     }
 }
 
@@ -280,9 +326,9 @@ impl Game {
         io::stdin().read_line(&mut input_line).unwrap();
         let number_of_trees = parse_input!(input_line, i32); // the current amount of trees
         for i in 0..number_of_trees as usize {
-            self.trees.push(Tree::new());
-            if self.trees[i].is_mine {
-                match self.trees[i].size {
+            let new_tree = Tree::new();
+            if new_tree.is_mine {
+                match new_tree.size {
                     0 => self.ntree0 += 1,
                     1 => self.ntree1 += 1,
                     2 => self.ntree2 += 1,
@@ -290,6 +336,7 @@ impl Game {
                     _ => {},
                 }
             }
+            self.board.update_tree(new_tree);
         }
 
         let mut input_line = String::new();
@@ -330,9 +377,12 @@ impl Game {
                 current_gain = self.board.get_cell_richness_points(action.cell_index as usize) - cost + size;
             } else if action.command == "WAIT" {
                 current_gain = -2 * self.me.sun + 1;
-            } else if action.command == "SEED" && self.ntree0 < MAX_TREE0_N && (self.ntree0 + self.ntree1 + self.ntree2 + self.ntree3) < MAX_TREES {
-                // check for shadows
-                current_gain = self.board.get_cell_richness_points(action.target_index as usize) - self.ntree0;
+            } else if action.command == "SEED" && self.get_tree_size(action.cell_index) > 1 && self.ntree0 < MAX_TREE0_N && (self.ntree0 + self.ntree1 + self.ntree2 + self.ntree3) < MAX_TREES {
+                let shadow = self.board.cast_shadow_in_every_direction(action.target_index as usize, 3);
+                eprintln!("{} shadows value {}", action, shadow);
+                if shadow >= 0 {
+                    current_gain = self.board.get_cell_richness_points(action.target_index as usize) - self.ntree0;
+                }
             }
             // eprintln!("{} gains {} ({})", action.action_string, current_gain, gain);
             if current_gain > gain {
@@ -344,10 +394,7 @@ impl Game {
     }
 
     fn get_tree_size(&self, cell: i32) -> i32 {
-        for tree in self.trees.iter() {
-            if tree.cell_index == cell { return tree.size; }
-        }
-        return 0;
+        self.board.get_tree_size(cell as usize)
     }
 
     fn initial_stage(&mut self) {
@@ -392,7 +439,7 @@ fn main() {
     // game loop
     loop {
         game.update();
-        game.board.print_dbg();
+        // game.board.print_dbg();
 
         // Write an action using println!("message...");
         // To debug: eprintln!("Debug message...");
