@@ -74,6 +74,16 @@ impl Cell {
     }
 }
 
+impl fmt::Display for Cell {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.tree.is_some() {
+            write!(f, "Cell: {}\nRich: {}\nTree: {}\n", self.index, self.richness, self.tree.as_ref().unwrap())
+        } else {
+            write!(f, "Cell: {}\nRich: {}\nTree: None\n", self.index, self.richness)
+        }
+    }
+}
+
 // Board
 struct Board {
     board: Vec<Cell>,
@@ -91,8 +101,8 @@ impl Board {
     }
 
     pub fn print_dbg(&self) {
-        for i in 0..BOARD_SIZE as usize {
-            eprintln!("{}: {}", i, self.board[i].index);
+        for cell in self.board.iter() {
+            eprintln!("{}", cell);
         }
     }
 
@@ -110,7 +120,6 @@ impl Board {
 
 // Tree
 struct Tree {
-    cost: i32,
     cell_index: i32,
     size: i32,
     is_mine: bool,
@@ -120,7 +129,6 @@ struct Tree {
 impl Tree {
     pub fn new() -> Tree {
         let mut new_tree = Tree {
-            cost: TREE_LIFECYCLE_COST,
             cell_index: 0,
             size: 0,
             is_mine: false,
@@ -134,6 +142,12 @@ impl Tree {
             new_tree.is_mine = parse_input!(inputs[2], i32) != 0; // 1 if this is your tree
             new_tree.is_dormant = parse_input!(inputs[3], i32) != 0; // 1 if this tree is dormant
         return new_tree;
+    }
+}
+
+impl fmt::Display for Tree {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Tree: {}\nSize: {}\nis_mine: {}\nis_dormant: {}", self.cell_index, self.size, self.is_mine, self.is_dormant)
     }
 }
 
@@ -299,7 +313,6 @@ impl Game {
     pub fn naive_move(&mut self) {
         let mut gain: i32 = -2 * self.me.sun;
         let mut action_index: usize = 0;
-        eprintln!("2:{} 3:{}", self.ntree2, self.ntree3);
         for (i, action) in self.actions.iter().enumerate() {
             let mut current_gain = -2 * self.me.sun;
             if action.command == "COMPLETE" && (self.day > 20 || self.ntree3 > MIN_TREE3_N) {
@@ -313,7 +326,7 @@ impl Game {
                     2 => 7 + self.ntree3,
                     _ => 1000000,
                 };
-                eprintln!("{} for {} ({})", action.action_string, cost, self.me.sun);
+                // eprintln!("{} for {} ({})", action.action_string, cost, self.me.sun);
                 current_gain = self.board.get_cell_richness_points(action.cell_index as usize) - cost + size;
             } else if action.command == "WAIT" {
                 current_gain = -2 * self.me.sun + 1;
@@ -321,7 +334,7 @@ impl Game {
                 // check for shadows
                 current_gain = self.board.get_cell_richness_points(action.target_index as usize) - self.ntree0;
             }
-            eprintln!("{} gains {} ({})", action.action_string, current_gain, gain);
+            // eprintln!("{} gains {} ({})", action.action_string, current_gain, gain);
             if current_gain > gain {
                 gain = current_gain;
                 action_index = i;
@@ -379,6 +392,7 @@ fn main() {
     // game loop
     loop {
         game.update();
+        game.board.print_dbg();
 
         // Write an action using println!("message...");
         // To debug: eprintln!("Debug message...");
