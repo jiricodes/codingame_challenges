@@ -1,6 +1,6 @@
 use std::io;
 use std::cmp;
-
+use std::fmt;
 
 // Plan
 // - add enum for richness values to consts
@@ -27,13 +27,16 @@ macro_rules! parse_input {
     ($x:expr, $t:ident) => ($x.trim().parse::<$t>().unwrap())
 }
 // Constants
-const TREE_SUN_POINTS: i32 = 3;
 const TREE_LIFECYCLE_COST: i32 = 4;
 const FOREST_INITIAL_NUTRIENT: i32 = 20;
 const POINTS_PER_3SUN: i32 = 1;
 const GAME_LENGTH: i32 = 24;
 const BOARD_SIZE: i32 = 37;
 
+// Settings
+const MIN_TREE3_N: i32 = 3;
+const MAX_TREE0_N: i32 = 3;
+const MAX_TREES: i32 = 12;
 
 // Struct Cell
 struct Cell {
@@ -65,6 +68,10 @@ impl Cell {
             neighbours: [neigh_0, neigh_1, neigh_2, neigh_3, neigh_4, neigh_5],
         }
     }
+
+    pub fn reset_tree(&mut self) {
+        self.tree = None;
+    }
 }
 
 // Board
@@ -93,11 +100,16 @@ impl Board {
         let value = (self.board[index].richness - 1) * 2;
         cmp::max(0, value)
     }
+
+    pub fn reset_trees(&mut self) {
+        for cell in self.board.iter_mut() {
+            cell.reset_tree();
+        }
+    }
 }
 
 // Tree
 struct Tree {
-    sun_points: i32,
     cost: i32,
     cell_index: i32,
     size: i32,
@@ -108,7 +120,6 @@ struct Tree {
 impl Tree {
     pub fn new() -> Tree {
         let mut new_tree = Tree {
-            sun_points: TREE_SUN_POINTS,
             cost: TREE_LIFECYCLE_COST,
             cell_index: 0,
             size: 0,
@@ -161,6 +172,7 @@ struct Action {
     action_string: String,
     command: String, //should be changed to enum later
     cell_index: i32,
+    target_index: i32,
 }
 
 impl Action {
@@ -169,6 +181,7 @@ impl Action {
             action_string: String::new(),
             command: String::new(),
             cell_index: -1,
+            target_index: -1,
         };
         let mut input_line = String::new();
         io::stdin().read_line(&mut input_line).unwrap();
@@ -177,13 +190,21 @@ impl Action {
         action.command = inputs[0].to_string();
         if inputs.len() > 1 {
             action.cell_index = parse_input!(inputs[1], i32);
+            if inputs.len() > 2 {
+                action.target_index = parse_input!(inputs[2], i32);
+            }
         }
-        eprintln!("{}", action.command);
         return action;
     }
 
     pub fn exec(&self) {
         println!("{}", self.action_string);
+    }
+}
+
+impl fmt::Display for Action {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Action: {}\nOrigin: {}\nTarget: {}", self.command, self.cell_index, self.target_index)
     }
 }
 
@@ -196,6 +217,8 @@ struct Game {
     actions: Vec<Action>,
     me: Player,
     opponent: Player,
+    ntree0: i32,
+    ntree1: i32,
     ntree2: i32,
     ntree3: i32,
 }
@@ -217,13 +240,15 @@ impl Game {
             actions: Vec::new(),
             me: Player::new(),
             opponent: Player::new(),
+            ntree0: 0,
+            ntree1: 0,
             ntree2: 0,
             ntree3: 0,
         }
     }
 
     pub fn update(&mut self) {
-        self.reset();
+        // self.reset();
         // Consider using input_line.clear() instead of new all the time
 
         let mut input_line = String::new();
@@ -244,6 +269,8 @@ impl Game {
             self.trees.push(Tree::new());
             if self.trees[i].is_mine {
                 match self.trees[i].size {
+                    0 => self.ntree0 += 1,
+                    1 => self.ntree1 += 1,
                     2 => self.ntree2 += 1,
                     3 => self.ntree3 += 1,
                     _ => {},
@@ -259,11 +286,14 @@ impl Game {
         }
     }
 
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.trees.clear();
         self.actions.clear();
+        self.ntree0 = 0;
+        self.ntree1 = 0;
         self.ntree2 = 0;
         self.ntree3 = 0;
+        self.board.reset_trees();
     }
 
     pub fn naive_move(&mut self) {
@@ -271,23 +301,25 @@ impl Game {
         let mut action_index: usize = 0;
         eprintln!("2:{} 3:{}", self.ntree2, self.ntree3);
         for (i, action) in self.actions.iter().enumerate() {
-            let mut current_gain = -1;
-            if action.command == "COMPLETE" && self.me.sun >= TREE_LIFECYCLE_COST && self.day > 4{
+            let mut current_gain = -2 * self.me.sun;
+            if action.command == "COMPLETE" && (self.day > 20 || self.ntree3 > MIN_TREE3_N) {
                 current_gain = self.nutrients;
                 current_gain += self.board.get_cell_richness_points(action.cell_index as usize);
             } else if action.command == "GROW" {
                 let size = self.get_tree_size(action.cell_index);
                 let cost: i32 = match size {
+                    0 => 1 + self.ntree1,
                     1 => 3 + self.ntree2,
                     2 => 7 + self.ntree3,
                     _ => 1000000,
                 };
                 eprintln!("{} for {} ({})", action.action_string, cost, self.me.sun);
-                if cost <= self.me.sun {
-                    current_gain = self.board.get_cell_richness_points(action.cell_index as usize);
-                }
+                current_gain = self.board.get_cell_richness_points(action.cell_index as usize) - cost + size;
             } else if action.command == "WAIT" {
-                current_gain = -1;
+                current_gain = -2 * self.me.sun + 1;
+            } else if action.command == "SEED" && self.ntree0 < MAX_TREE0_N && (self.ntree0 + self.ntree1 + self.ntree2 + self.ntree3) < MAX_TREES {
+                // check for shadows
+                current_gain = self.board.get_cell_richness_points(action.target_index as usize) - self.ntree0;
             }
             eprintln!("{} gains {} ({})", action.action_string, current_gain, gain);
             if current_gain > gain {
@@ -295,7 +327,6 @@ impl Game {
                 action_index = i;
             }
         }
-        assert!(gain >= -1, "action not selected");
         self.actions[action_index].exec();
     }
 
@@ -329,10 +360,13 @@ impl Game {
                 eprintln!("grow other seed and plant one in center (from lvl1)");
                 println!("WAIT");
             },
+            _ => {
+                eprintln!("other case");
+                println!("WAIT");
+            }
         }
     }
 }
-
 
 /**
  * Auto-generated code below aims at helping you parse
@@ -352,10 +386,14 @@ fn main() {
 
         // GROW cellIdx | SEED sourceIdx targetIdx | COMPLETE cellIdx | WAIT <message>
         // println!("WAIT");
-        if game.day < 6 {
-            game.initial_stage();
-        } else {
+        // if game.day < 6 {
+        //     game.initial_stage();
+        // } else {
             game.naive_move();
-        }
+        // }
+
+        /// RESET STATE
+        game.reset();
+
     }
 }
