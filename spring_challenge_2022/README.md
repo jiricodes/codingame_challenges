@@ -10,3 +10,7 @@
 - [ ] try to gain wild mana if nothing else
 - [ ] attacker cast shield on monsters that have eta < 12 + ttd
 - [x] change Vec2 to be f32
+- [ ] add simulate turn
+	- [ ] simulate monster
+	- [ ] simulate hero
+	- [ ] simulate gamestate

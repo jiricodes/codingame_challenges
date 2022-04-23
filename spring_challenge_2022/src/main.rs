@@ -1,9 +1,11 @@
-use std::collections::HashMap;
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 use std::fmt;
 use std::io;
-use std::ops::{Add, Mul};
+use std::ops::{Add, Mul, Sub};
 
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 macro_rules! parse_input {
     ($x:expr, $t:ident) => {
@@ -12,14 +14,14 @@ macro_rules! parse_input {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-struct Vec2 {
+pub struct Vec2 {
     x: f32,
     y: f32,
 }
 
 impl Vec2 {
-    const ZERO: Self = Self { x: 0.0, y: 0.0 };
-    const MAX: Self = Self {
+    pub const ZERO: Self = Self { x: 0.0, y: 0.0 };
+    pub const MAX: Self = Self {
         x: 17630.0,
         y: 9000.0,
     };
@@ -49,6 +51,17 @@ impl Vec2 {
             y: self.y as f32 / m,
         }
     }
+
+    pub fn perp(&self) -> Self {
+        Self {
+            x: -self.y,
+            y: self.x,
+        }
+    }
+
+    pub fn in_bounds(&self, bounds: &Vec2) -> bool {
+        self.x >= 0.0 && self.x <= bounds.x && self.y >= 0.0 && self.y <= bounds.y
+    }
 }
 
 impl fmt::Display for Vec2 {
@@ -60,10 +73,21 @@ impl fmt::Display for Vec2 {
 impl Add for Vec2 {
     type Output = Self;
 
-    fn add(self, other: Self) -> Self {
+    fn add(self, other: Self) -> Self::Output {
         Self {
             x: self.x + other.x,
             y: self.y + other.y,
+        }
+    }
+}
+
+impl Sub for Vec2 {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self::Output {
+        Self {
+            x: self.x - other.x,
+            y: self.y - other.y,
         }
     }
 }
@@ -79,15 +103,91 @@ impl Mul<f32> for Vec2 {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+impl Eq for Vec2 {}
+
+#[derive(Debug, Clone)]
+pub struct Patrol {
+    center: Vec2,
+    start_angle: f32,
+    end_angle: f32,
+    radius: f32,
+    n_segments: f32,
+    step: f32,
+    points: Vec<Vec2>,
+    i: i32,
+    d: i32,
+}
+
+impl Patrol {
+    pub fn new(center: Vec2, radius: f32, n: f32) -> Self {
+        let (start_angle, end_angle) = if center == Vec2::ZERO {
+            ((0.0_f32).to_radians(), (90.0_f32).to_radians())
+        } else {
+            ((-180.0_f32).to_radians(), (-90.0_f32).to_radians())
+        };
+        let step = (end_angle - start_angle) / n;
+        let mut new = Self {
+            center,
+            start_angle,
+            end_angle,
+            radius,
+            n_segments: n,
+            step,
+            points: Vec::new(),
+            i: 0,
+            d: 1,
+        };
+        new.calculate_points();
+        new
+    }
+
+    fn calculate_points(&mut self) {
+        self.points.clear();
+        for i in 0..(self.n_segments as usize) + 1 {
+            let x = self.center.x + self.radius * (self.start_angle + self.step * i as f32).cos();
+            let y = self.center.y + self.radius * (self.start_angle + self.step * i as f32).sin();
+            self.points.push(Vec2 { x: x, y: y });
+        }
+    }
+
+    pub fn get(&self) -> Vec2 {
+        self.points[self.i as usize].clone()
+    }
+
+    pub fn get_next(&mut self) -> Vec2 {
+        let t = self.points[self.i as usize].clone();
+        let l = (self.points.len() - 1) as i32;
+        if self.i == l {
+            self.d = -1;
+        } else if self.i == 0 {
+            self.d = 1;
+        }
+        self.i = self.i + self.d;
+        t
+    }
+}
+
+#[derive(Debug, Clone)]
 struct Hero {
     id: i32,
     pos: Vec2,
     shield: i32,
     charmed: bool,
+    patrol: Patrol,
 }
 
 impl Hero {
+    const VIEW_RANGE: f32 = 2200.0;
+    const SPEED: f32 = 800.0;
+    const DMG: i32 = 2;
+
+    pub fn new(base: &Vec2) -> Self {
+        Self {
+            patrol: Patrol::new(*base, 8200.0, 10.0),
+            ..Default::default()
+        }
+    }
+
     pub fn update(&mut self, id: i32, pos: Vec2, shield: i32, charmed: bool) {
         self.id = id;
         self.pos = pos;
@@ -102,6 +202,14 @@ impl Hero {
     pub fn wait(&self) {
         println!("WAIT");
     }
+
+    pub fn patrol(&mut self) {
+        let t = self.patrol.get();
+        if self.pos.distance(&t) < Self::SPEED * 0.8 {
+            let t = self.patrol.get_next();
+        }
+        println!("MOVE {}", t);
+    }
 }
 
 impl Default for Hero {
@@ -111,11 +219,12 @@ impl Default for Hero {
             pos: Vec2::ZERO,
             shield: 0,
             charmed: false,
+            patrol: Patrol::new(Vec2::ZERO, 8200.0, 12.0),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Monster {
     id: i32,
     pos: Vec2,
@@ -140,23 +249,7 @@ impl Monster {
         velocity: Vec2,
         target: Option<Vec2>,
     ) -> Self {
-        let eta = if target.is_some() {
-            let t = target.unwrap();
-            let mut approach: f32 = 0.0;
-            let mut p: Vec2 = pos.clone();
-            let mut v: Vec2 = velocity.normalize();
-            while (p + (v * approach)).distance(&t) > Self::AGRRO_RANGE {
-                approach += 1.0;
-            }
-            p = p + (v * approach);
-            // get new vector towards target
-            // get eta to target == reach
-            // return approach + reach
-            0
-        } else {
-            -1
-        };
-        Self {
+        let mut new = Self {
             id,
             pos,
             shield,
@@ -164,8 +257,38 @@ impl Monster {
             hp,
             velocity,
             target,
-            eta,
-        }
+            eta: -1,
+        };
+        new.eta();
+        new
+    }
+
+    // pub fn simulate()
+
+    fn eta(&mut self) {
+        self.eta = if self.target.is_some() {
+            let t = self.target.unwrap();
+            let mut approach: f32 = 0.0;
+            let mut p: Vec2 = self.pos.clone();
+            let mut v: Vec2 = self.velocity.normalize() * Self::SPEED;
+            // find round at which the monster is < 5000
+            while (p + (v * approach)).distance(&t) > Self::AGRRO_RANGE {
+                approach += 1.0;
+            }
+            p = p + (v * approach);
+            // get new vector towards target
+            v = t - p;
+            // get eta to target == reach
+            let reach = (v.magnitude() - 300.0).max(0.0) / Self::SPEED;
+            // return approach + reach
+            if reach == 0.0 {
+                0
+            } else {
+                (reach + approach).trunc() as i32 + 1
+            }
+        } else {
+            -1
+        };
     }
 
     pub fn closer(self, other: Self, pos: &Vec2) -> Self {
@@ -176,6 +299,28 @@ impl Monster {
         } else {
             other
         }
+    }
+}
+
+// The priority queue depends on `Ord`.
+// Explicitly implement the trait so the queue becomes a min-heap
+// instead of a max-heap.
+impl Ord for Monster {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Notice that the we flip the ordering on costs.
+        // In case of a tie we compare positions - this step is necessary
+        // to make implementations of `PartialEq` and `Ord` consistent.
+        other
+            .eta
+            .cmp(&self.eta)
+            .then_with(|| self.hp.cmp(&other.hp))
+    }
+}
+
+// `PartialOrd` needs to be implemented as well.
+impl PartialOrd for Monster {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -209,7 +354,7 @@ struct Game {
     me: Player,
     enemy: Player,
     my_heroes: [Hero; 3],
-    monsters: HashMap<i32, Monster>,
+    monsters: BinaryHeap<Monster>,
 }
 
 impl Game {
@@ -236,8 +381,8 @@ impl Game {
                 base: enemy_base,
                 ..Default::default()
             },
-            my_heroes: [Hero::default(); 3],
-            monsters: HashMap::new(),
+            my_heroes: [Hero::new(&base), Hero::new(&base), Hero::new(&base)],
+            monsters: BinaryHeap::new(),
         }
     }
 
@@ -251,11 +396,8 @@ impl Game {
         velocity: Vec2,
         target: Option<Vec2>,
     ) {
-        // Lets decide later if the ld information is somewhat useful
-        let _ = self.monsters.insert(
-            id,
-            Monster::new(id, pos, shield, charmed, hp, velocity, target),
-        );
+        self.monsters
+            .push(Monster::new(id, pos, shield, charmed, hp, velocity, target));
     }
 
     pub fn update(&mut self) {
@@ -338,9 +480,9 @@ impl Game {
         if closest_monster.is_some() {
             let monster = closest_monster.unwrap();
             let pos = monster.pos + monster.velocity;
-            self.move_all_to(&pos);
+            // self.move_all_to(&pos);
         } else {
-            self.wait_all();
+            // self.wait_all();
         }
     }
 
@@ -367,6 +509,10 @@ fn main() {
     // game loop
     loop {
         game.update();
+        eprintln!("{:?}", game.monsters);
+        game.my_heroes[0].patrol();
+        game.my_heroes[1].patrol();
+        game.my_heroes[2].patrol();
         // check for critical targets - the ones heading to base
         // check for nearby targets
         // go patrol
