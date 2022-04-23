@@ -204,9 +204,9 @@ impl Hero {
     }
 
     pub fn patrol(&mut self) {
-        let t = self.patrol.get();
-        if self.pos.distance(&t) < Self::SPEED * 0.8 {
-            let t = self.patrol.get_next();
+        let mut t = self.patrol.get();
+        while self.pos.distance(&t) < Self::VIEW_RANGE {
+            t = self.patrol.get_next();
         }
         println!("MOVE {}", t);
     }
@@ -381,7 +381,7 @@ impl Game {
                 base: enemy_base,
                 ..Default::default()
             },
-            my_heroes: [Hero::new(&base), Hero::new(&base), Hero::new(&base)],
+            my_heroes: [Hero::new(&base), Hero::new(&base), Hero::new(&enemy_base)],
             monsters: BinaryHeap::new(),
         }
     }
