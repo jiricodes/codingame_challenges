@@ -1,6 +1,7 @@
 # Codingame Spring Challenge 2022
 
 ## Notes and Ideas
+- [ ] add timing, so I know why timing out
 - [ ] calculate time to kill per monster
 - [ ] calculate time to arrive to base per monster
 - [ ] calculate time to reach the monster by a hero
