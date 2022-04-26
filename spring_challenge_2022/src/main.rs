@@ -166,6 +166,12 @@ impl Patrol {
         self.i = self.i + self.d;
         t
     }
+
+    pub fn get_next_offensively(&mut self) -> Vec2 {
+        let l = (self.points.len() - 1) as i32;
+        self.i = (self.i) % l;
+        self.get_next()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -211,6 +217,29 @@ impl Hero {
         let mut t = self.patrol.get();
         while self.pos.distance(&t) < Self::VIEW_RANGE {
             t = self.patrol.get_next();
+        }
+        println!("MOVE {}", t);
+    }
+
+    pub fn offensive_patrol(&mut self, monsters: &mut Vec<Monster>) {
+        if self.pos.distance(&self.patrol.center) < 9000.0 {
+            monsters.sort_by(|a, b| {
+                let (_, ai) = self.find_intercept(a);
+                let (_, bi) = self.find_intercept(b);
+                ai.partial_cmp(&bi).unwrap()
+            });
+            let mut pruned = monsters
+                .iter()
+                .filter(|x| x.pos.distance(&self.patrol.center) < 9000.0);
+            if let Some(m) = pruned.next() {
+                let (t, _) = self.find_intercept(m);
+                println!("MOVE {}", t);
+                return;
+            }
+        }
+        let mut t = self.patrol.get();
+        while self.pos.distance(&t) < Self::VIEW_RANGE {
+            t = self.patrol.get_next_offensively();
         }
         println!("MOVE {}", t);
     }
@@ -263,8 +292,7 @@ impl Hero {
     pub fn attack_attempt_wind(&self, monsters: &Vec<Monster>) -> bool {
         for m in monsters.iter() {
             if m.shield == 0 && m.pos.distance(&self.pos) < Self::WIND_RANGE {
-                let t = self.patrol.center - self.pos;
-                println!("SPELL WIND {}", t);
+                println!("SPELL WIND {}", self.patrol.center);
                 return true;
             }
         }
@@ -562,6 +590,23 @@ impl Game {
             hero.wait();
         }
     }
+
+    pub fn attack(&mut self) {
+        let attacker = &self.my_heroes[2];
+        if self.me.mana > 120 {
+            if attacker.attack_attempt_shield(&self.monsters_enemy) {
+                return;
+            };
+            if attacker.attack_attempt_wind(&self.monsters_enemy) {
+                return;
+            };
+            if attacker.attack_attempt_wind(&self.monsters_none) {
+                return;
+            };
+        } else {
+            self.my_heroes[2].offensive_patrol(&mut self.monsters_none);
+        }
+    }
 }
 
 /**
@@ -577,23 +622,12 @@ fn main() {
         game.update();
         eprintln!("{:.3}ms", now.elapsed().as_millis());
         // defender
+        let now = Instant::now();
         game.my_heroes[0].defend(&mut game.monsters_me);
         // defender
         game.my_heroes[1].defend(&mut game.monsters_me);
         // attacker
-        let mut mvd = false;
-        if game.me.mana > 120 {
-            mvd = game.my_heroes[2].attack_attempt_shield(&game.monsters_enemy);
-            if !mvd {
-                mvd = game.my_heroes[2].attack_attempt_wind(&game.monsters_enemy);
-            }
-            if !mvd {
-                mvd = game.my_heroes[2].attack_attempt_wind(&game.monsters_none);
-            }
-        }
-        if !mvd {
-            game.my_heroes[2].patrol();
-        }
+        game.attack();
         let another = now.elapsed().as_millis();
         eprintln!("{:.3}ms", another);
         // check for critical targets - the ones heading to base
