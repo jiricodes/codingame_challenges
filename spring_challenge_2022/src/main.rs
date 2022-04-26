@@ -190,11 +190,12 @@ impl Hero {
     const ATTACK_RANGE: f32 = 800.0;
     const SHIELD_RANGE: f32 = 2200.0;
     const WIND_RANGE: f32 = 1280.0;
+    const CONTROL_RANGE: f32 = 2200.0;
 
     pub fn new(base: &Vec2, attack: bool) -> Self {
         if attack {
             Self {
-                patrol: Patrol::new(base.opposite_corner(), 6000.0, 5.0),
+                patrol: Patrol::new(base.opposite_corner(), 7000.0, 12.0),
                 ..Default::default()
             }
         } else {
@@ -221,20 +222,40 @@ impl Hero {
         );
     }
 
-    pub fn wait(&self) {
-        println!("WAIT");
+    pub fn wait(&self, yell: Option<String>) {
+        println!("WAIT {}:{}", self.id, yell.unwrap_or("n/a".to_string()));
     }
 
-    pub fn wind(&self, t: &Vec2) {
-        println!("SPELL WIND {}", t);
+    pub fn wind(&self, t: &Vec2, yell: Option<String>) {
+        println!(
+            "SPELL WIND {} {}:{}",
+            t,
+            self.id,
+            yell.unwrap_or("n/a".to_string())
+        );
     }
 
-    pub fn shield(&self, tid: i32) {
-        println!("SPELL SHIELD {}", tid);
+    pub fn shield(&self, tid: i32, yell: Option<String>) {
+        println!(
+            "SPELL SHIELD {} {}:{}",
+            tid,
+            self.id,
+            yell.unwrap_or("n/a".to_string())
+        );
+    }
+
+    pub fn control(&self, tid: i32, t: &Vec2, yell: Option<String>) {
+        println!(
+            "SPELL CONTROL {} {} {}:{}",
+            tid,
+            t,
+            self.id,
+            yell.unwrap_or("n/a".to_string())
+        );
     }
 
     pub fn patrol(&mut self, monsters: &mut Vec<Monster>) {
-        if self.pos.distance(&self.patrol.center) < 9000.0 {
+        if !monsters.is_empty() {
             monsters.sort_by(|a, b| {
                 let (_, ai) = self.find_intercept(a);
                 let (_, bi) = self.find_intercept(b);
@@ -291,33 +312,47 @@ impl Hero {
             if ttk < m.eta {
                 let _ = monsters_me.pop();
             } else if mana > 10 && self.pos.distance(&m.pos) < Self::WIND_RANGE {
-                self.wind(&self.patrol.center.opposite_corner());
+                self.wind(
+                    &self.patrol.center.opposite_corner(),
+                    Some(format!("diff {}", m.eta - ttk)),
+                );
                 return;
             }
             self.move_to(&t, Some(format!("M{}", mid)));
-        } else {
-            self.patrol(monsters_none);
+            return;
         }
+        self.patrol(monsters_none);
     }
 
-    pub fn attack_attempt_shield(&self, monsters: &Vec<Monster>) -> bool {
-        for m in monsters.iter() {
-            if m.shield == 0 && m.eta < 15 && m.pos.distance(&self.pos) < Self::SHIELD_RANGE {
-                self.shield(m.id);
-                return true;
+    pub fn attack(
+        &mut self,
+        monsters_enemy: &mut Vec<Monster>,
+        monsters_none: &mut Vec<Monster>,
+        mana: u32,
+    ) {
+        if mana > 120 {
+            // attempt to wind
+            for m in monsters_enemy.iter() {
+                if m.shield == 0 && m.pos.distance(&self.pos) < Self::WIND_RANGE {
+                    self.wind(&self.patrol.center, Some("E".to_string()));
+                    return;
+                }
+            }
+            for m in monsters_none.iter() {
+                if m.shield == 0 && m.pos.distance(&self.pos) < Self::WIND_RANGE {
+                    self.wind(&self.patrol.center, Some("N".to_string()));
+                    return;
+                }
+            }
+            // attempt to shield
+            for m in monsters_enemy.iter() {
+                if m.shield == 0 && m.eta < 15 && m.pos.distance(&self.pos) < Self::SHIELD_RANGE {
+                    self.shield(m.id, Some("E".to_string()));
+                    return;
+                }
             }
         }
-        false
-    }
-
-    pub fn attack_attempt_wind(&self, monsters: &Vec<Monster>) -> bool {
-        for m in monsters.iter() {
-            if m.shield == 0 && m.pos.distance(&self.pos) < Self::WIND_RANGE {
-                self.wind(&self.patrol.center);
-                return true;
-            }
-        }
-        false
+        self.patrol(monsters_none);
     }
 }
 
@@ -342,6 +377,7 @@ struct Monster {
     hp: i32,
     velocity: Vec2,
     target: Option<Vec2>,
+    reaching: bool,
     eta: i32,
 }
 
@@ -357,6 +393,7 @@ impl Monster {
         hp: i32,
         velocity: Vec2,
         target: Option<Vec2>,
+        reaching: bool,
     ) -> Self {
         let mut new = Self {
             id,
@@ -366,6 +403,7 @@ impl Monster {
             hp,
             velocity,
             target,
+            reaching,
             eta: i32::MAX,
         };
         new.eta();
@@ -522,6 +560,7 @@ impl Game {
         hp: i32,
         velocity: Vec2,
         threat_for: i32,
+        reaching: bool,
     ) {
         match threat_for {
             1 => self.monsters_me.push(Monster::new(
@@ -532,6 +571,7 @@ impl Game {
                 hp,
                 velocity,
                 Some(self.me.base),
+                reaching,
             )),
             2 => self.monsters_enemy.push(Monster::new(
                 id,
@@ -541,10 +581,11 @@ impl Game {
                 hp,
                 velocity,
                 Some(self.enemy.base),
+                reaching,
             )),
-            _ => self
-                .monsters_none
-                .push(Monster::new(id, pos, shield, charmed, hp, velocity, None)),
+            _ => self.monsters_none.push(Monster::new(
+                id, pos, shield, charmed, hp, velocity, None, false,
+            )),
         }
     }
 
@@ -605,25 +646,10 @@ impl Game {
                     health,
                     Vec2 { x: vx, y: vy },
                     threat_for,
+                    near_base == 1,
                 );
             }
         }
-    }
-
-    pub fn attack(&mut self) {
-        let attacker = &self.my_heroes[2];
-        if self.me.mana > 120 {
-            if attacker.attack_attempt_shield(&self.monsters_enemy) {
-                return;
-            };
-            if attacker.attack_attempt_wind(&self.monsters_enemy) {
-                return;
-            };
-            if attacker.attack_attempt_wind(&self.monsters_none) {
-                return;
-            };
-        }
-        self.my_heroes[2].patrol(&mut self.monsters_none);
     }
 }
 
@@ -639,13 +665,23 @@ fn main() {
         let now = Instant::now();
         game.update();
         eprintln!("{:.3}ms", now.elapsed().as_millis());
+        eprintln!(
+            "me {}, enemy {}, none {}",
+            game.monsters_me.len(),
+            game.monsters_enemy.len(),
+            game.monsters_none.len()
+        );
         // defender
         let now = Instant::now();
         game.my_heroes[0].defend(&mut game.monsters_me, &mut game.monsters_none, game.me.mana);
         // defender
         game.my_heroes[1].defend(&mut game.monsters_me, &mut game.monsters_none, game.me.mana);
         // attacker
-        game.attack();
+        game.my_heroes[2].attack(
+            &mut game.monsters_enemy,
+            &mut game.monsters_none,
+            game.me.mana,
+        );
         let another = now.elapsed().as_millis();
         eprintln!("{:.3}ms", another);
         // check for critical targets - the ones heading to base
