@@ -343,6 +343,10 @@ impl Hero {
                     self.wind(&self.patrol.center, Some("N".to_string()));
                     return;
                 }
+                if m.shield == 0 && m.pos.distance(&self.pos) < Self::CONTROL_RANGE {
+                    self.control(m.id, &self.patrol.center, Some("N".to_string()));
+                    return;
+                }
             }
             // attempt to shield
             for m in monsters_enemy.iter() {
@@ -553,16 +557,23 @@ impl Game {
         reaching: bool,
     ) {
         match threat_for {
-            1 => self.monsters_me.push(Monster::new(
-                id,
-                pos,
-                shield,
-                charmed,
-                hp,
-                velocity,
-                Some(self.me.base),
-                reaching,
-            )),
+            1 => {
+                let new = Monster::new(
+                    id,
+                    pos,
+                    shield,
+                    charmed,
+                    hp,
+                    velocity,
+                    Some(self.me.base),
+                    reaching,
+                );
+                if new.pos.distance(&self.me.base) > 9000.0 {
+                    self.monsters_none.push(new)
+                } else {
+                    self.monsters_me.push(new)
+                }
+            }
             2 => self.monsters_enemy.push(Monster::new(
                 id,
                 pos,
