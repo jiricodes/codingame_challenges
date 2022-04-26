@@ -265,18 +265,24 @@ impl Hero {
         (m.pos, i as i32)
     }
 
-    pub fn defend(&mut self, monsters: &mut BinaryHeap<Monster>) {
+    pub fn defend(&mut self, monsters: &mut BinaryHeap<Monster>, mana: u32) {
         let m_opt = monsters.peek();
         if m_opt.is_some() {
             let m = m_opt.unwrap();
             let (t, ttk) = self.time_to_kill(m);
             if ttk < m.eta {
                 let _ = monsters.pop();
+            } else if mana > 10 && self.pos.distance(&m.pos) < Self::WIND_RANGE {
+                self.wind(&self.patrol.center.opposite_corner());
             }
             self.move_to(&t);
         } else {
             self.patrol();
         }
+    }
+
+    pub fn wind(&self, t: &Vec2) {
+        println!("SPELL WIND {}", t);
     }
 
     pub fn attack_attempt_shield(&self, monsters: &Vec<Monster>) -> bool {
@@ -481,7 +487,7 @@ impl Game {
                 base: enemy_base,
                 ..Default::default()
             },
-            my_heroes: [Hero::new(&base), Hero::new(&base), Hero::new(&enemy_base)],
+            my_heroes: [Hero::new(&base), Hero::new(&base), Hero::new(&base)],
             monsters_me: BinaryHeap::new(),
             monsters_enemy: Vec::new(),
             monsters_none: Vec::new(),
@@ -623,11 +629,12 @@ fn main() {
         eprintln!("{:.3}ms", now.elapsed().as_millis());
         // defender
         let now = Instant::now();
-        game.my_heroes[0].defend(&mut game.monsters_me);
+        game.my_heroes[0].defend(&mut game.monsters_me, game.me.mana);
         // defender
-        game.my_heroes[1].defend(&mut game.monsters_me);
+        game.my_heroes[1].defend(&mut game.monsters_me, game.me.mana);
         // attacker
-        game.attack();
+        game.my_heroes[2].defend(&mut game.monsters_me, game.me.mana);
+        // game.attack();
         let another = now.elapsed().as_millis();
         eprintln!("{:.3}ms", another);
         // check for critical targets - the ones heading to base
