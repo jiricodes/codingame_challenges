@@ -1,7 +1,8 @@
 # Codingame Spring Challenge 2022
 
 ## Notes and Ideas
-- [ ] add timing, so I know why timing out
+- [ ] create new attact idle - for some unknown reason the offensive patrol times out... often
+- [x] add timing, so I know why timing out - offensive patrol is the reason
 - [ ] calculate time to kill per monster
 - [ ] calculate time to arrive to base per monster
 - [ ] calculate time to reach the monster by a hero
@@ -12,6 +13,6 @@
 - [ ] attacker cast shield on monsters that have eta < 12 + ttd
 - [x] change Vec2 to be f32
 - [ ] add simulate turn
-	- [ ] simulate monster
+	- [x] simulate monster
 	- [ ] simulate hero
 	- [ ] simulate gamestate

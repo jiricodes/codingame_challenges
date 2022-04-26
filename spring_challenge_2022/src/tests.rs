@@ -16,7 +16,7 @@ fn monster_eta() {
         None,
     );
     dbg!(monster.eta);
-    assert!(monster.eta == -1);
+    assert!(monster.eta == i32::MAX);
 
     // Close
     let monster = Monster::new(
@@ -72,7 +72,7 @@ fn monster_eta() {
 
 #[test]
 fn patrol_nodes() {
-    let mut patrol = Patrol::new(Vec2::ZERO, 8200.0, 12.0);
+    let mut patrol = Patrol::new(Vec2::MAX, 8200.0, 10.0);
     dbg!(&patrol.points);
     for _ in 0..27 {
         let p = patrol.get_next();

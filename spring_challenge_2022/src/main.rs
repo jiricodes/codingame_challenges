@@ -3,6 +3,7 @@ use std::collections::BinaryHeap;
 use std::fmt;
 use std::io;
 use std::ops::{Add, Mul, Sub};
+use std::time::Instant;
 
 #[cfg(test)]
 mod tests;
@@ -249,7 +250,7 @@ impl Hero {
         }
     }
 
-    pub fn attack_attempt_shield(&self, monsters: &BinaryHeap<Monster>) -> bool {
+    pub fn attack_attempt_shield(&self, monsters: &Vec<Monster>) -> bool {
         for m in monsters.iter() {
             if m.shield == 0 && m.eta < 15 && m.pos.distance(&self.pos) < Self::SHIELD_RANGE {
                 println!("SPELL SHIELD {}", m.id);
@@ -259,7 +260,7 @@ impl Hero {
         false
     }
 
-    pub fn attack_attempt_wind(&self, monsters: &BinaryHeap<Monster>) -> bool {
+    pub fn attack_attempt_wind(&self, monsters: &Vec<Monster>) -> bool {
         for m in monsters.iter() {
             if m.shield == 0 && m.pos.distance(&self.pos) < Self::WIND_RANGE {
                 let t = self.patrol.center - self.pos;
@@ -424,8 +425,8 @@ struct Game {
     enemy: Player,
     my_heroes: [Hero; 3],
     monsters_me: BinaryHeap<Monster>,
-    monsters_enemy: BinaryHeap<Monster>,
-    monsters_none: BinaryHeap<Monster>,
+    monsters_enemy: Vec<Monster>,
+    monsters_none: Vec<Monster>,
 }
 
 impl Game {
@@ -454,8 +455,8 @@ impl Game {
             },
             my_heroes: [Hero::new(&base), Hero::new(&base), Hero::new(&enemy_base)],
             monsters_me: BinaryHeap::new(),
-            monsters_enemy: BinaryHeap::new(),
-            monsters_none: BinaryHeap::new(),
+            monsters_enemy: Vec::new(),
+            monsters_none: Vec::new(),
         }
     }
 
@@ -572,26 +573,29 @@ fn main() {
 
     // game loop
     loop {
+        let now = Instant::now();
         game.update();
-        eprintln!("{:?}", game.monsters_me);
+        eprintln!("{:.3}ms", now.elapsed().as_millis());
         // defender
         game.my_heroes[0].defend(&mut game.monsters_me);
         // defender
         game.my_heroes[1].defend(&mut game.monsters_me);
         // attacker
         let mut mvd = false;
-        // if game.me.mana > 120 {
-        //     mvd = game.my_heroes[2].attack_attempt_shield(&game.monsters_enemy);
-        //     if !mvd {
-        //         mvd = game.my_heroes[2].attack_attempt_wind(&game.monsters_enemy);
-        //     }
-        //     if !mvd {
-        //         mvd = game.my_heroes[2].attack_attempt_wind(&game.monsters_none);
-        //     }
-        // }
+        if game.me.mana > 120 {
+            mvd = game.my_heroes[2].attack_attempt_shield(&game.monsters_enemy);
+            if !mvd {
+                mvd = game.my_heroes[2].attack_attempt_wind(&game.monsters_enemy);
+            }
+            if !mvd {
+                mvd = game.my_heroes[2].attack_attempt_wind(&game.monsters_none);
+            }
+        }
         if !mvd {
             game.my_heroes[2].patrol();
         }
+        let another = now.elapsed().as_millis();
+        eprintln!("{:.3}ms", another);
         // check for critical targets - the ones heading to base
         // check for nearby targets
         // go patrol
