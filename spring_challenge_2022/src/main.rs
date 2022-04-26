@@ -254,27 +254,27 @@ impl Hero {
         );
     }
 
-    pub fn patrol(&mut self, monsters: &mut Vec<Monster>) {
-        if !monsters.is_empty() {
-            monsters.sort_by(|a, b| {
+    pub fn patrol(&mut self, monsters_none: &mut Vec<Monster>) {
+        // Check if there are neutral monsters
+        // if there's is, sort them by distance from the hero
+        // iterate through those and if distance from patrolling center
+        // is < 9000.0 then attack the spider
+        if !monsters_none.is_empty() {
+            monsters_none.sort_by(|a, b| {
                 let (_, ai) = self.find_intercept(a);
                 let (_, bi) = self.find_intercept(b);
                 ai.partial_cmp(&bi).unwrap()
             });
-            let mut pruned = monsters
-                .iter()
-                .filter(|x| x.pos.distance(&self.patrol.center) < 9000.0);
-            if let Some(m) = pruned.next() {
-                let (t, _) = self.find_intercept(m);
-                self.move_to(&t, Some(format!("N{}", m.id)));
-                return;
+            for m in monsters_none.iter() {
+                if self.patrol.center.distance(&m.pos) < 9000.0 {
+                    let (t, _) = self.find_intercept(m);
+                    self.move_to(&t, Some(format!("N{}", m.id)));
+                    return;
+                }
             }
         }
-        let mut t = self.patrol.get();
-        while self.pos.distance(&t) < Self::VIEW_RANGE {
-            t = self.patrol.get_next();
-        }
-        self.move_to(&t, Some(format!("patrol")));
+        let t = self.patrol.get_next();
+        self.move_to(&t, Some(format!("PAT")));
     }
 
     pub fn time_to_kill(&self, monster: &Monster) -> (Vec2, i32) {
@@ -446,16 +446,6 @@ impl Monster {
             }
         }
         self.pos = self.pos + self.velocity;
-    }
-
-    pub fn closer(self, other: Self, pos: &Vec2) -> Self {
-        let d0 = self.pos.distance(pos);
-        let d1 = other.pos.distance(pos);
-        if d0 < d1 {
-            self
-        } else {
-            other
-        }
     }
 }
 
