@@ -72,48 +72,29 @@ impl Cell {
         self.can_spawn = parse_input!(inputs[5], i32) == 1;
         self.in_recycler_range = parse_input!(inputs[6], i32) == 1;
     }
+
+    fn is_mine(&self) -> bool {
+        self.owner == 1
+    }
 }
 
-// enum Cell {
-//     Grass,
-//     Me(u32),
-//     Enemy(u32),
-//     MyRecycler,
-//     EnemyRecycler,
-// }
-
-// impl Cell {
-//     fn is_mine(&self) -> bool {
-//         match *self {
-//             Cell::Grass => false,
-//             Cell::Me(_) => true,
-//             Cell::Enemy(_) => false,
-//             Cell::MyRecycler => true,
-//             Cell::EnemyRecycler => false,
-//         }
-//     }
-
-//     fn is_enemys(&self) -> bool {
-//         match *self {
-//             Cell::Grass => false,
-//             Cell::Me(_) => false,
-//             Cell::Enemy(_) => true,
-//             Cell::MyRecycler => false,
-//             Cell::EnemyRecycler => true,
-//         }
-//     }
-// }
-
+#[derive(Debug, Clone)]
 struct Grid {
+    my_matter: u32,
+    enemy_matter: u32,
     dim: (u32, u32),
     grid: Vec<Cell>,
+    mine: Vec<usize>,
 }
 
 impl Grid {
     fn new(width: u32, height: u32) -> Self {
         Self {
+            my_matter: 10,
+            enemy_matter: 10,
             dim: (width, height),
             grid: vec![Cell::default(); (width * height) as usize],
+            mine: Vec::with_capacity((width * height) as usize),
         }
     }
 
@@ -127,10 +108,52 @@ impl Grid {
     }
 
     fn update_from_stdin(&mut self) {
-        for mut cell in self.grid.iter_mut() {
+        // update currency
+        let mut input_line = String::new();
+        io::stdin().read_line(&mut input_line).unwrap();
+        let inputs = input_line.split(" ").collect::<Vec<_>>();
+        self.my_matter = parse_input!(inputs[0], u32);
+        self.enemy_matter = parse_input!(inputs[1], u32);
+        // clear list of owned cells
+        self.mine.clear();
+        // update cells
+        for (i, cell) in self.grid.iter_mut().enumerate() {
             cell.update_from_stdin();
+            if cell.is_mine() {
+                self.mine.push(i);
+            }
         }
     }
+
+    fn get_neighbours(&self, index: usize) -> [Option<usize>; 4] {
+        let mut ret = [None; 4];
+        let x = index as u32 % self.dim.0;
+        let y = index as u32 / self.dim.0;
+        //Left
+        if x > 0 {
+            ret[0] = Some(index - 1);
+        }
+        //Right
+        if x < self.dim.0 - 1 {
+            ret[1] = Some(index + 1);
+        }
+        // Top
+        if y > 0 {
+            ret[2] = Some(index - self.dim.0 as usize);
+        }
+        // Bottom
+        if y < self.dim.1 - 1 {
+            ret[3] = Some(index + self.dim.0 as usize);
+        }
+        ret
+    }
+}
+
+fn check_build(grid: &Grid) -> Option<Action> {
+    if grid.my_matter >= 10 {
+        for i in grid.mine.iter() {}
+    }
+    None
 }
 
 enum Action {
@@ -141,11 +164,9 @@ enum Action {
 }
 
 fn main() {
-    let mut state = GameState::default();
     let mut grid = Grid::from_stdin();
     // game loop
     loop {
-        state.update_from_stdin();
         grid.update_from_stdin();
 
         // Write an action using println!("message...");
@@ -160,5 +181,47 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
     fn basics() {}
+
+    #[test]
+    fn get_neighbours_of_index() {
+        let grid = Grid::new(3, 4);
+        let i = 0;
+        let expected: [Option<usize>; 4] = [None, Some(1), None, Some(3)];
+        let res = grid.get_neighbours(i);
+        assert_eq!(res, expected, "failed at index={}", i);
+        let i = 1;
+        let expected: [Option<usize>; 4] = [Some(0), Some(2), None, Some(4)];
+        let res = grid.get_neighbours(i);
+        assert_eq!(res, expected, "failed at index={}", i);
+        let i = 2;
+        let expected: [Option<usize>; 4] = [Some(1), None, None, Some(5)];
+        let res = grid.get_neighbours(i);
+        assert_eq!(res, expected, "failed at index={}", i);
+        let i = 3;
+        let expected: [Option<usize>; 4] = [None, Some(4), Some(0), Some(6)];
+        let res = grid.get_neighbours(i);
+        assert_eq!(res, expected, "failed at index={}", i);
+        let i = 4;
+        let expected: [Option<usize>; 4] = [Some(3), Some(5), Some(1), Some(7)];
+        let res = grid.get_neighbours(i);
+        assert_eq!(res, expected, "failed at index={}", i);
+        let i = 5;
+        let expected: [Option<usize>; 4] = [Some(4), None, Some(2), Some(8)];
+        let res = grid.get_neighbours(i);
+        assert_eq!(res, expected, "failed at index={}", i);
+        let i = 9;
+        let expected: [Option<usize>; 4] = [None, Some(10), Some(6), None];
+        let res = grid.get_neighbours(i);
+        assert_eq!(res, expected, "failed at index={}", i);
+        let i = 10;
+        let expected: [Option<usize>; 4] = [Some(9), Some(11), Some(7), None];
+        let res = grid.get_neighbours(i);
+        assert_eq!(res, expected, "failed at index={}", i);
+        let i = 11;
+        let expected: [Option<usize>; 4] = [Some(10), None, Some(8), None];
+        let res = grid.get_neighbours(i);
+        assert_eq!(res, expected, "failed at index={}", i);
+    }
 }
