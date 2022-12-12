@@ -195,7 +195,7 @@ impl Hero {
     pub fn new(base: &Vec2, attack: bool) -> Self {
         if attack {
             Self {
-                patrol: Patrol::new(base.opposite_corner(), 7000.0, 12.0),
+                patrol: Patrol::new(base.opposite_corner(), 6000.0, 12.0),
                 ..Default::default()
             }
         } else {
@@ -310,8 +310,26 @@ impl Hero {
             let mid = m.id;
             let (t, ttk) = self.time_to_kill(m);
             if ttk < m.eta {
+                // I can delay me running for it
+                if ttk < m.eta - 2 {
+                    for m in monsters_me.iter() {
+                        if mana > 10
+                            && !m.reaching
+                            && m.shield == 0
+                            && self.pos.distance(&m.pos) < Self::CONTROL_RANGE
+                        {
+                            self.control(
+                                m.id,
+                                &self.patrol.center.opposite_corner(),
+                                Some("CM".to_string()),
+                            );
+                            let _ = monsters_me.pop();
+                            return;
+                        }
+                    }
+                }
                 let _ = monsters_me.pop();
-            } else if mana > 10 && self.pos.distance(&m.pos) < Self::WIND_RANGE {
+            } else if mana > 10 && m.shield == 0 && self.pos.distance(&m.pos) < Self::WIND_RANGE {
                 self.wind(
                     &self.patrol.center.opposite_corner(),
                     Some(format!("diff {}", m.eta - ttk)),
@@ -339,7 +357,10 @@ impl Hero {
                 }
             }
             for m in monsters_none.iter() {
-                if m.shield == 0 && m.pos.distance(&self.pos) < Self::WIND_RANGE {
+                if m.shield == 0
+                    && m.pos.distance(&self.pos) < Self::WIND_RANGE
+                    && m.pos.distance(&self.patrol.center) < 7200.0
+                {
                     self.wind(&self.patrol.center, Some("N".to_string()));
                     return;
                 }
@@ -590,7 +611,7 @@ impl Game {
         }
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self, buf: &mut String) {
         // We should somehow track monsters that we've seen, but are not visible now
         // for now lets clear the monsters before each update
         self.monsters_me.clear();
@@ -601,14 +622,14 @@ impl Game {
         self.me.update();
         self.enemy.update();
 
-        let mut input_line = String::new();
-        io::stdin().read_line(&mut input_line).unwrap();
-        let entity_count = parse_input!(input_line, usize); // Amount of heros and monsters you can see
+        buf.clear();
+        io::stdin().read_line(buf).unwrap();
+        let entity_count = parse_input!(buf, usize); // Amount of heros and monsters you can see
 
         for _ in 0..entity_count {
-            let mut input_line = String::new();
-            io::stdin().read_line(&mut input_line).unwrap();
-            let inputs = input_line.split(" ").collect::<Vec<_>>();
+            buf.clear();
+            io::stdin().read_line(buf).unwrap();
+            let inputs = buf.split(" ").collect::<Vec<_>>();
             let id = parse_input!(inputs[0], i32); // Unique identifier
             let tp = parse_input!(inputs[1], i32); // 0=monster, 1=your hero, 2=opponent hero
             let x = parse_input!(inputs[2], f32); // Position of this entity
@@ -660,11 +681,12 @@ impl Game {
  **/
 fn main() {
     let mut game = Game::new();
+    let mut buffer = String::with_capacity(128);
 
     // game loop
     loop {
         let now = Instant::now();
-        game.update();
+        game.update(&mut buffer);
         eprintln!("{:.3}ms", now.elapsed().as_millis());
         eprintln!(
             "me {}, enemy {}, none {}",
