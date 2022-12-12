@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io;
 
 macro_rules! parse_input {
@@ -147,15 +148,36 @@ impl Grid {
         }
         ret
     }
+
+    fn get_xy(&self, index: usize) -> (u32, u32) {
+        let x = index as u32 % self.dim.0;
+        let y = index as u32 / self.dim.0;
+        (x, y)
+    }
 }
 
 fn check_build(grid: &Grid) -> Option<Action> {
     if grid.my_matter >= 10 {
-        for i in grid.mine.iter() {}
+        for &i in grid.mine.iter() {
+            if grid.grid[i].can_build {
+                let can = grid.get_neighbours(i).iter().all(|x| {
+                    if let Some(idx) = x {
+                        grid.grid[*idx].scrap_amount <= grid.grid[i].scrap_amount
+                    } else {
+                        false
+                    }
+                });
+                if can {
+                    let xy = grid.get_xy(i);
+                    return Some(Action::Build(xy.0, xy.1));
+                }
+            }
+        }
     }
     None
 }
 
+#[derive(Debug)]
 enum Action {
     Wait,
     Move(u32, u32, u32, u32, u32),
@@ -163,8 +185,23 @@ enum Action {
     Spawn(u32, u32, u32),
 }
 
+impl fmt::Display for Action {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self {
+            Action::Wait => write!(f, "WAIT"),
+            Action::Move(amount, from_x, from_y, to_x, to_y) => {
+                write!(f, "MOVE {} {} {} {} {}", amount, from_x, from_y, to_x, to_y)
+            }
+            Action::Build(x, y) => write!(f, "BUILD {} {}", x, y),
+            Action::Spawn(amount, x, y) => write!(f, "SPAWN {} {} {}", amount, x, y),
+        }
+    }
+}
+
 fn main() {
     let mut grid = Grid::from_stdin();
+    let mut action_set: Vec<Action> = Vec::new();
+    let mut action_string: String = String::new();
     // game loop
     loop {
         grid.update_from_stdin();
@@ -172,7 +209,19 @@ fn main() {
         // Write an action using println!("message...");
         // To debug: eprintln!("Debug message...");
 
-        println!("WAIT");
+        action_set.clear();
+        if let Some(action) = check_build(&grid) {
+            action_set.push(action);
+        }
+        if action_set.is_empty() {
+            println!("{}", Action::Wait);
+            continue;
+        }
+        action_string.clear();
+        for action in action_set.iter() {
+            print!("{};", action);
+        }
+        println!();
     }
 }
 
