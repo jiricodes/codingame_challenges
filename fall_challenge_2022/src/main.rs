@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::fmt;
 use std::io;
 
@@ -5,48 +8,6 @@ macro_rules! parse_input {
     ($x:expr, $t:ident) => {
         $x.trim().parse::<$t>().unwrap()
     };
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct GameState {
-    my_matter: u32,
-    enemy_matter: u32,
-}
-
-impl GameState {
-    fn update_from_stdin(&mut self) {
-        let mut input_line = String::new();
-        io::stdin().read_line(&mut input_line).unwrap();
-        let inputs = input_line.split(" ").collect::<Vec<_>>();
-        self.my_matter = parse_input!(inputs[0], u32);
-        self.enemy_matter = parse_input!(inputs[1], u32);
-    }
-
-    fn update() {
-        // resolve BUILD
-        // MOVE & SPAWN
-        // Remove colliding robots
-
-        // Mark tiles
-
-        // Recyclers reduce scraps of tiles
-        // Tiles with 0 scraps -> Grass -> Remove units and structures
-        // Currency update
-        // Check game end
-    }
-
-    /// Checks if the game should end
-    /// Reasons to end
-    /// - a player no longer controls single tile
-    /// - 20 turns have passed without any tile changing scraps or owner
-    /// - 200 have concluded
-    fn check_game_end() {
-        // check end
-        // check winner?
-    }
-
-    /// Player that controls the most tiles
-    fn check_winning_player() {}
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -86,6 +47,7 @@ struct Grid {
     dim: (u32, u32),
     grid: Vec<Cell>,
     mine: Vec<usize>,
+    others: Vec<(u32, u32)>,
 }
 
 impl Grid {
@@ -96,6 +58,7 @@ impl Grid {
             dim: (width, height),
             grid: vec![Cell::default(); (width * height) as usize],
             mine: Vec::with_capacity((width * height) as usize),
+            others: Vec::with_capacity((width * height) as usize),
         }
     }
 
@@ -115,13 +78,19 @@ impl Grid {
         let inputs = input_line.split(" ").collect::<Vec<_>>();
         self.my_matter = parse_input!(inputs[0], u32);
         self.enemy_matter = parse_input!(inputs[1], u32);
-        // clear list of owned cells
+        // clear lists
         self.mine.clear();
+        self.others.clear();
+
         // update cells
         for (i, cell) in self.grid.iter_mut().enumerate() {
             cell.update_from_stdin();
             if cell.is_mine() {
                 self.mine.push(i);
+            } else {
+                let x = i as u32 % self.dim.0;
+                let y = i as u32 / self.dim.0;
+                self.others.push((x, y));
             }
         }
     }
@@ -156,6 +125,9 @@ impl Grid {
     }
 }
 
+/// This function aims to build at such tile that the recycler doesn't
+/// disappear before all neighbouring tiles are without scrap
+/// probably not useful from a strategical point of view?
 fn check_build(grid: &Grid) -> Option<Action> {
     if grid.my_matter >= 10 {
         for &i in grid.mine.iter() {
@@ -172,6 +144,65 @@ fn check_build(grid: &Grid) -> Option<Action> {
                     return Some(Action::Build(xy.0, xy.1));
                 }
             }
+        }
+    }
+    None
+}
+
+fn dist_squared(from: (u32, u32), to: (u32, u32)) -> u32 {
+    let dx = to.0 as i32 - from.0 as i32;
+    let dy = to.1 as i32 - from.1 as i32;
+    (dx * dx + dy * dy) as u32
+}
+/// First attemt at spawning
+/// General idea is to spawn at a tile closest to most empty and enemy tiles
+fn check_spawn(grid: &Grid) -> Option<Action> {
+    if grid.my_matter >= 10 {
+        let mut max_other = ((0, 0), u32::MAX);
+        for &i in grid.mine.iter() {
+            if grid.grid[i].can_spawn {
+                let xy = grid.get_xy(i);
+                let td: u32 = grid
+                    .others
+                    .iter()
+                    .fold(0, |acc, &pos| acc + dist_squared(xy, pos));
+                if td < max_other.1 {
+                    max_other.0 = xy;
+                    max_other.1 = td;
+                }
+            }
+        }
+        if max_other.1 < u32::MAX {
+            return Some(Action::Spawn(1, max_other.0 .0, max_other.0 .1));
+        }
+    }
+    None
+}
+
+/// First attemt at moving
+/// General idea is to move to a tile closest to most empty and enemy tiles
+fn check_move(grid: &Grid, from: (u32, u32), amount: u32) -> Option<Action> {
+    if grid.my_matter >= 10 {
+        let mut max_other = ((0, 0), u32::MAX);
+        for &xy in grid.others.iter() {
+            let td: u32 = grid
+                .others
+                .iter()
+                .fold(0, |acc, &pos| acc + dist_squared(xy, pos));
+            if td < max_other.1 {
+                max_other.0 = xy;
+                max_other.1 = td;
+            }
+        }
+
+        if max_other.1 < u32::MAX {
+            return Some(Action::Move(
+                amount,
+                from.0,
+                from.1,
+                max_other.0 .0,
+                max_other.0 .1,
+            ));
         }
     }
     None
@@ -210,9 +241,28 @@ fn main() {
         // To debug: eprintln!("Debug message...");
 
         action_set.clear();
-        if let Some(action) = check_build(&grid) {
+        // move first
+        for &i in grid.mine.iter() {
+            if grid.grid[i].units > 0 {
+                let from_xy = grid.get_xy(i);
+                if let Some(action) = check_move(&grid, from_xy, grid.grid[i].units) {
+                    action_set.push(action);
+                    // should update grid here to enable build and spawn in newly free locations
+                }
+            }
+        }
+        // update grid with moves
+        // build to block?
+        // spawn if there's enough credits
+        if let Some(action) = check_spawn(&grid) {
             action_set.push(action);
         }
+        // if let Some(action) = check_build(&grid) {
+        //     action_set.push(action);
+        //     // update grid with the build action
+        //     // check for additional builds?
+        // }
+        // spawn decision or move decision
         if action_set.is_empty() {
             println!("{}", Action::Wait);
             continue;
@@ -222,55 +272,5 @@ fn main() {
             print!("{};", action);
         }
         println!();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[ignore]
-    fn basics() {}
-
-    #[test]
-    fn get_neighbours_of_index() {
-        let grid = Grid::new(3, 4);
-        let i = 0;
-        let expected: [Option<usize>; 4] = [None, Some(1), None, Some(3)];
-        let res = grid.get_neighbours(i);
-        assert_eq!(res, expected, "failed at index={}", i);
-        let i = 1;
-        let expected: [Option<usize>; 4] = [Some(0), Some(2), None, Some(4)];
-        let res = grid.get_neighbours(i);
-        assert_eq!(res, expected, "failed at index={}", i);
-        let i = 2;
-        let expected: [Option<usize>; 4] = [Some(1), None, None, Some(5)];
-        let res = grid.get_neighbours(i);
-        assert_eq!(res, expected, "failed at index={}", i);
-        let i = 3;
-        let expected: [Option<usize>; 4] = [None, Some(4), Some(0), Some(6)];
-        let res = grid.get_neighbours(i);
-        assert_eq!(res, expected, "failed at index={}", i);
-        let i = 4;
-        let expected: [Option<usize>; 4] = [Some(3), Some(5), Some(1), Some(7)];
-        let res = grid.get_neighbours(i);
-        assert_eq!(res, expected, "failed at index={}", i);
-        let i = 5;
-        let expected: [Option<usize>; 4] = [Some(4), None, Some(2), Some(8)];
-        let res = grid.get_neighbours(i);
-        assert_eq!(res, expected, "failed at index={}", i);
-        let i = 9;
-        let expected: [Option<usize>; 4] = [None, Some(10), Some(6), None];
-        let res = grid.get_neighbours(i);
-        assert_eq!(res, expected, "failed at index={}", i);
-        let i = 10;
-        let expected: [Option<usize>; 4] = [Some(9), Some(11), Some(7), None];
-        let res = grid.get_neighbours(i);
-        assert_eq!(res, expected, "failed at index={}", i);
-        let i = 11;
-        let expected: [Option<usize>; 4] = [Some(10), None, Some(8), None];
-        let res = grid.get_neighbours(i);
-        assert_eq!(res, expected, "failed at index={}", i);
     }
 }
