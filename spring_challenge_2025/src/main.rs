@@ -123,9 +123,18 @@ impl State {
     }
 
     fn try_capture(&self, placement: usize, ngbs: &[usize]) -> Option<Self> {
-        let (cnt, ttl) = ngbs.iter().fold((0, 0), |acc, n| {
-            (acc.0 + (self.tiles[*n] != 0) as u8, acc.1 + self.tiles[*n])
-        });
+        let mut cnt = 0;
+        let mut ttl = 0;
+        for ngb in ngbs {
+            if self.tiles[*ngb] == 0 {
+                return None
+            }
+            cnt += 1;
+            ttl += self.tiles[*ngb];
+        }
+        // let (cnt, ttl) = ngbs.iter().fold((0, 0), |acc, n| {
+        //     (acc.0 + (self.tiles[*n] != 0) as u8, acc.1 + self.tiles[*n])
+        // });
         if cnt > 1 && ttl <= 6 {
             let mut new = Self {
                 tiles: self.tiles.clone(),
@@ -172,6 +181,9 @@ impl State {
             let mut new: Vec<State> = Vec::new();
             // iterate over all states at this depth
             for state in current.iter() {
+                // eprintln!("-----------{}----------", d);
+                // state.eprint();
+                // eprintln!(">>>>");
                 let mut is_finished = true;
                 // for each state check all possible placements
                 for i in 0..9 {
@@ -182,6 +194,10 @@ impl State {
                     let mut next_states = state.next_states(i);
                     // dbg!(next_states.len());
                     // dbg!(&next_states);
+                    // for state in next_states.iter() {
+                    //     state.eprint();
+                    //     eprintln!();
+                    // }
                     new.append(&mut next_states);
                     // for each capture, queue up next possible state
                     // or place one
