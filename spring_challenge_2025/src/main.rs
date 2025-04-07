@@ -147,19 +147,18 @@ impl State {
         }
     }
 
-    fn next_states(&self, placement: usize) -> Vec<Self> {
-        let mut ret = Vec::with_capacity(12);
+    fn next_states(&self, placement: usize, results: &mut Vec<Self>) {
+        results.clear();
         for ngbs in Self::HARDCODE_NGBS[placement] {
             if let Some(new) = self.try_capture(placement, ngbs) {
-                ret.push(new);
+                results.push(new);
             }
         }
-        if ret.len() == 0 {
+        if results.len() == 0 {
             let mut new = *self;
             new.tiles[placement] = 1;
-            ret.push(new);
+            results.push(new);
         }
-        ret
     }
 
     fn solve2(&self, depth: i32) -> StateHash {
@@ -173,6 +172,7 @@ impl State {
         let mut current: Vec<State> = vec![self.clone()];
         let mut res_count = 0;
         let mut result = StateHash::default();
+        let mut next_states: Vec<Self> = Vec::with_capacity(12);
         for d in 0..depth {
             // if we don't have a state in the queue, we ran out of the options
             if current.is_empty() {
@@ -195,14 +195,16 @@ impl State {
                         continue;
                     }
                     is_finished = false;
-                    let mut next_states = state.next_states(i);
+                    state.next_states(i, &mut next_states);
                     // dbg!(next_states.len());
                     // dbg!(&next_states);
                     // for state in next_states.iter() {
                     //     state.eprint();
                     //     eprintln!();
                     // }
-                    new.append(&mut next_states);
+                    for next_state in next_states.iter() {
+                        new.push(*next_state);
+                    }
                     // for each capture, queue up next possible state
                     // or place one
                 }
