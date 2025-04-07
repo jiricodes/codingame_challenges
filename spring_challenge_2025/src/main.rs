@@ -127,7 +127,7 @@ impl State {
         let mut ttl = 0;
         for ngb in ngbs {
             if self.tiles[*ngb] == 0 {
-                return None
+                return None;
             }
             cnt += 1;
             ttl += self.tiles[*ngb];
@@ -136,9 +136,7 @@ impl State {
         //     (acc.0 + (self.tiles[*n] != 0) as u8, acc.1 + self.tiles[*n])
         // });
         if cnt > 1 && ttl <= 6 {
-            let mut new = Self {
-                tiles: self.tiles.clone(),
-            };
+            let mut new = *self;
             new.tiles[placement] = ttl;
             for n in ngbs {
                 new.tiles[*n] = 0;
@@ -150,25 +148,31 @@ impl State {
     }
 
     fn next_states(&self, placement: usize) -> Vec<Self> {
-        let mut ret = Vec::new();
+        let mut ret = Vec::with_capacity(12);
         for ngbs in Self::HARDCODE_NGBS[placement] {
             if let Some(new) = self.try_capture(placement, ngbs) {
                 ret.push(new);
             }
         }
         if ret.len() == 0 {
-            let mut new = Self {
-                tiles: self.tiles.clone(),
-            };
+            let mut new = *self;
             new.tiles[placement] = 1;
             ret.push(new);
         }
         ret
     }
 
+    fn solve2(&self, depth: i32) -> StateHash {
+        if depth == 0 {
+            return StateHash::from(self);
+        }
+        StateHash::default()
+    }
+
     fn solve(&self, depth: i32) -> i32 {
         let mut current: Vec<State> = vec![self.clone()];
-        let mut results: Vec<StateHash> = Vec::new();
+        let mut res_count = 0;
+        let mut result = StateHash::default();
         for d in 0..depth {
             // if we don't have a state in the queue, we ran out of the options
             if current.is_empty() {
@@ -178,8 +182,8 @@ impl State {
             //dbg!(&current);
             // create a new queue, that will serve as next iteration with increased depth
             // we can perhaps cull here?
-            let mut new: Vec<State> = Vec::new();
             // iterate over all states at this depth
+            let mut new: Vec<State> = Vec::with_capacity(1000000);
             for state in current.iter() {
                 // eprintln!("-----------{}----------", d);
                 // state.eprint();
@@ -203,19 +207,25 @@ impl State {
                     // or place one
                 }
                 if is_finished {
-                    results.push(StateHash::from(state));
+                    // results.push(StateHash::from(state));
+                    result = result + StateHash::from(state);
+                    res_count += 1;
                 }
             }
             current = new;
         }
         // append the state att current depth, but not finished games
         for state in current {
-            results.push(StateHash::from(state));
+            // results.push(StateHash::from(state));
+            result = result + StateHash::from(state);
+            res_count += 1;
+            res_count += 1;
         }
         // iter over results and sum hashes
-        dbg!(results.len());
-        let ret = results.iter().fold(StateHash::default(), |acc, x| acc + *x);
-        ret.hash
+        dbg!(res_count);
+        // let ret = results.iter().fold(StateHash::default(), |acc, x| acc + *x);
+        // ret.hash
+        result.hash
     }
 
     //change toggle
@@ -259,11 +269,18 @@ impl fmt::Display for State {
  * the standard input according to the problem statement.
  **/
 fn main() {
-    let mut input_line = String::new();
-    io::stdin().read_line(&mut input_line).unwrap();
-    let depth = parse_input!(input_line, i32);
-    dbg!(depth);
-    let state = State::from_io();
+    // let mut input_line = String::new();
+    // io::stdin().read_line(&mut input_line).unwrap();
+    // let depth = parse_input!(input_line, i32);
+    // dbg!(depth);
+    // let state = State::from_io();
+    // dbg!(state.tiles);
+
+    let depth = 24;
+    let state = State {
+        tiles: [3, 0, 0, 3, 6, 2, 1, 0, 2],
+    };
+
     // state.eprint();
     // for i in 0..3 as usize {
     //     let mut inputs = String::new();
@@ -333,6 +350,16 @@ mod tests {
         };
         let res = state.solve(depth);
         let expected = 76092874;
+        assert_eq!(res, expected);
+    }
+
+    fn unique_states_241() {
+        let depth = 24;
+        let state = State {
+            tiles: [3, 0, 0, 3, 6, 2, 1, 0, 2],
+        };
+        let res = state.solve(depth);
+        let expected = 661168294; // 418440394 end states
         assert_eq!(res, expected);
     }
 }
