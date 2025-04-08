@@ -1,5 +1,7 @@
+use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Display;
+use std::hash::Hash;
 use std::io;
 use std::ops::Add;
 
@@ -20,7 +22,12 @@ impl From<State> for StateHash {
         for i in 0..9 {
             hash = hash * 10 + value.tiles[i] as i32;
         }
-        Self { hash }
+        let new = Self { hash };
+        let mut ret = Self::default();
+        for _ in 0..value.cnt {
+            ret = ret + new;
+        }
+        ret
     }
 }
 
@@ -30,7 +37,12 @@ impl From<&State> for StateHash {
         for i in 0..9 {
             hash = hash * 10 + value.tiles[i] as i32;
         }
-        Self { hash }
+        let new = Self { hash };
+        let mut ret = Self::default();
+        for _ in 0..value.cnt {
+            ret = ret + new;
+        }
+        ret
     }
 }
 
@@ -62,9 +74,19 @@ struct Tile {
     val: u8,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq)]
 struct State {
     tiles: [u8; 9],
+    cnt: i32,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            tiles: [0; 9],
+            cnt: 1,
+        }
+    }
 }
 
 impl State {
@@ -119,23 +141,18 @@ impl State {
                 tiles[i * 3 + j] = value;
             }
         }
-        Self { tiles }
+        Self { tiles, cnt: 1 }
     }
 
     fn try_capture(&self, placement: usize, ngbs: &[usize]) -> Option<Self> {
-        let mut cnt = 0;
         let mut ttl = 0;
         for ngb in ngbs {
             if self.tiles[*ngb] == 0 {
                 return None;
             }
-            cnt += 1;
             ttl += self.tiles[*ngb];
         }
-        // let (cnt, ttl) = ngbs.iter().fold((0, 0), |acc, n| {
-        //     (acc.0 + (self.tiles[*n] != 0) as u8, acc.1 + self.tiles[*n])
-        // });
-        if cnt > 1 && ttl <= 6 {
+        if ttl <= 6 {
             let mut new = *self;
             new.tiles[placement] = ttl;
             for n in ngbs {
@@ -169,7 +186,11 @@ impl State {
     }
 
     fn solve(&self, depth: i32) -> i32 {
-        let mut current: Vec<State> = vec![self.clone()];
+        let mut stack_a: HashSet<State> = HashSet::with_capacity(1000000);
+        let mut stack_b: HashSet<State> = HashSet::with_capacity(1000000);
+        let mut current = &mut stack_a;
+        let mut new = &mut stack_b;
+        current.insert(*self);
         let mut res_count = 0;
         let mut result = StateHash::default();
         let mut next_states: Vec<Self> = Vec::with_capacity(12);
@@ -183,7 +204,8 @@ impl State {
             // create a new queue, that will serve as next iteration with increased depth
             // we can perhaps cull here?
             // iterate over all states at this depth
-            let mut new: Vec<State> = Vec::with_capacity(1000000);
+            // let mut new: Vec<State> = Vec::with_capacity(1000000);
+            new.clear();
             for state in current.iter() {
                 // eprintln!("-----------{}----------", d);
                 // state.eprint();
@@ -203,25 +225,32 @@ impl State {
                     //     eprintln!();
                     // }
                     for next_state in next_states.iter() {
-                        new.push(*next_state);
+                        if let Some(existing) = new.get(next_state) {
+                            let mut to_insert = *next_state;
+                            to_insert.cnt += existing.cnt;
+                            new.replace(to_insert);
+                        } else {
+                            new.insert(*next_state);
+                        }
                     }
                     // for each capture, queue up next possible state
                     // or place one
                 }
                 if is_finished {
                     // results.push(StateHash::from(state));
-                    result = result + StateHash::from(state);
-                    res_count += 1;
+                    result = result + StateHash::from(*state);
+                    res_count += state.cnt;
                 }
             }
+            let tmp = current;
             current = new;
+            new = tmp;
         }
         // append the state att current depth, but not finished games
-        for state in current {
+        for state in current.iter() {
             // results.push(StateHash::from(state));
-            result = result + StateHash::from(state);
-            res_count += 1;
-            res_count += 1;
+            result = result + StateHash::from(*state);
+            res_count += state.cnt;
         }
         // iter over results and sum hashes
         dbg!(res_count);
@@ -266,6 +295,18 @@ impl fmt::Display for State {
         )
     }
 }
+
+impl Hash for State {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.tiles.hash(state);
+    }
+}
+
+impl PartialEq for State {
+    fn eq(&self, other: &Self) -> bool {
+        self.tiles == other.tiles
+    }
+}
 /**
  * Auto-generated code below aims at helping you parse
  * the standard input according to the problem statement.
@@ -281,6 +322,7 @@ fn main() {
     let depth = 24;
     let state = State {
         tiles: [3, 0, 0, 3, 6, 2, 1, 0, 2],
+        cnt: 0,
     };
 
     // state.eprint();
@@ -307,6 +349,7 @@ mod tests {
     fn hash() {
         let state = State {
             tiles: [1, 2, 3, 4, 5, 6, 0, 1, 2],
+            ..Default::default()
         };
         let hash = StateHash::from(state);
         assert_eq!(hash.hash, 123456012);
@@ -327,6 +370,7 @@ mod tests {
         let depth = 20;
         let state = State {
             tiles: [0, 6, 0, 2, 2, 2, 1, 6, 1],
+            ..Default::default()
         };
         let res = state.solve(depth);
         let expected = 322444322;
@@ -338,6 +382,7 @@ mod tests {
         let depth = 1;
         let state = State {
             tiles: [5, 5, 5, 0, 0, 5, 5, 5, 5],
+            ..Default::default()
         };
         let res = state.solve(depth);
         let expected = 36379286;
@@ -349,16 +394,19 @@ mod tests {
         let depth = 8;
         let state = State {
             tiles: [6, 0, 6, 0, 0, 0, 6, 1, 5],
+            ..Default::default()
         };
         let res = state.solve(depth);
         let expected = 76092874;
         assert_eq!(res, expected);
     }
 
+    #[test]
     fn unique_states_241() {
         let depth = 24;
         let state = State {
             tiles: [3, 0, 0, 3, 6, 2, 1, 0, 2],
+            ..Default::default()
         };
         let res = state.solve(depth);
         let expected = 661168294; // 418440394 end states
